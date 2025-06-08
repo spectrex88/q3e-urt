@@ -1387,11 +1387,6 @@ run-server: build-server
 	@$(DOCKER_COMPOSE_CMD) up -d urt-server
 	@echo "Urban Terror server is running."
 
-.PHONY: run-server-interactive
-run-server-interactive: build-server
-	@echo "Starting and attaching to the Urban Terror server interactively..."
-	@$(DOCKER_COMPOSE_CMD) run urt-server
-
 .PHONY: shell-server
 shell-server:
 	@echo "Accessing interactive shell of the Urban Terror server..."

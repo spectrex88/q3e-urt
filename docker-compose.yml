@@ -4,15 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: urt-server
-    user: "${UID}:${GID}"
-    command: [ "/bin/bash", "-c", "bash ./server-run.sh" ]
-    ports:
-      - "27960:27960/udp"
+    user: "${UID:-1000}:${GID:-1000}"
+    command: [ "./server-run.sh" ]
+    network_mode: host
     volumes:
-      - ${PWD}:/usr/src/urt
-    networks:
-      - urt-network
-
-networks:
-  urt-network:
-    driver: bridge
+      - .:/usr/src/urt
+    environment:
+      - MALLOC_CHECK_=0
+      - GLIBC_TUNABLES=glibc.malloc.check=0
+    restart: unless-stopped
