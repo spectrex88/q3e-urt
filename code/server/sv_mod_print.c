@@ -60,14 +60,14 @@ void handleFlagCaptureTime(const char *line);
 void handleAssist(const char *line);
 
 ActionMap options[] = {
-        {"InitGame",              handleInitGame},
-        {"ClientUserinfoChanged", handleUserinfoChanged},
-        {"Kill",                  handleKill},
-        {"Item",                  handleItem},
-        {"Flag",                  handleFlag},
-        {"FlagCaptureTime",       handleFlagCaptureTime},
-        {"Assist",                handleAssist},
-        {NULL, NULL},
+    {"InitGame", handleInitGame},
+    {"ClientUserinfoChanged", handleUserinfoChanged},
+    {"Kill", handleKill},
+    {"Item", handleItem},
+    {"Flag", handleFlag},
+    {"FlagCaptureTime", handleFlagCaptureTime},
+    {"Assist", handleAssist},
+    {NULL, NULL},
 };
 
 int tokenizeUserinfoString(char *str, char *tokens[], int maxTokens);
@@ -295,7 +295,7 @@ void handleKill(const char *line) {
     }
 
     while (*colonPos == ' ') colonPos++;
-    count = sscanf(colonPos, "%[^ ] killed %[^ ]", killerName, victimName);
+    count = sscanf(colonPos, "%255[^ ] killed %255[^ ]", killerName, victimName);
     if (count != 2) {
         Com_DPrintf("Error: Invalid kill description format (%d): %s\n", count, colonPos);
         return;
@@ -660,6 +660,10 @@ void updatePlayerScore(client_t *client, ScoreFieldType field, int increment) {
     }
 
     int clientId = (int) (client - svs.clients);
+    if (clientId < 0 || clientId >= sv_maxclients->integer) {
+        return;
+    }
+
     int *scoreField;
     const char *scoreFieldName;
 
@@ -719,18 +723,11 @@ void updatePlayerScore(client_t *client, ScoreFieldType field, int increment) {
         Com_DPrintf("  Previous %s: %d\n", scoreFieldName, *scoreField);
         Com_DPrintf("  Increment: %d\n", increment);
 
-        int oldScore = *scoreField;
-        *scoreField += increment;
-        int newScore = *scoreField;
+        int oldScore = __sync_fetch_and_add(scoreField, increment);
+        int newScore = oldScore + increment;
 
         Com_DPrintf("  New %s: %d\n", scoreFieldName, newScore);
-
-        if (newScore == oldScore + increment) {
-            Com_DPrintf("%s successfully updated for client %d\n", scoreFieldName, clientId);
-        } else {
-            Com_DPrintf("Error: %s update failed for client %d. Expected: %d, Got: %d\n",
-                        scoreFieldName, clientId, oldScore + increment, newScore);
-        }
+        Com_DPrintf("%s successfully updated for client %d\n", scoreFieldName, clientId);
     }
 }
 
@@ -746,16 +743,16 @@ void balanceTeams(void) {
 
     if (timeSinceLastBalance < minBalanceIntervalMs) {
         Com_DPrintf(
-                "Auto-balance skipped: waiting for minimum interval (%d seconds). Current time: %d, Last balance time: %d, Time since last balance: %d ms, Minimum interval: %d ms\n",
-                sv_minBalanceInterval->integer, currentTime, lastBalanceTime, timeSinceLastBalance, minBalanceIntervalMs
+            "Auto-balance skipped: waiting for minimum interval (%d seconds). Current time: %d, Last balance time: %d, Time since last balance: %d ms, Minimum interval: %d ms\n",
+            sv_minBalanceInterval->integer, currentTime, lastBalanceTime, timeSinceLastBalance, minBalanceIntervalMs
         );
         atomic_flag_clear(&balanceTeamsFlag);
         return;
     }
 
     Com_DPrintf(
-            "Proceeding with team balance. Current time: %d, Last balance time: %d, Time since last balance: %d ms, Minimum interval: %d ms\n",
-            currentTime, lastBalanceTime, timeSinceLastBalance, minBalanceIntervalMs
+        "Proceeding with team balance. Current time: %d, Last balance time: %d, Time since last balance: %d ms, Minimum interval: %d ms\n",
+        currentTime, lastBalanceTime, timeSinceLastBalance, minBalanceIntervalMs
     );
     Com_DPrintf("Initiating team balance process at time: %d\n", currentTime);
 
@@ -801,13 +798,13 @@ void balanceTeams(void) {
             }
 
             Com_DPrintf(
-                    "Player %d: Team=%s, Kills=%d, Deaths=%d, Assists=%d, Score=%d, Flag Dropped=%d, Flag Returned=%d, Flag Captured=%d, Flag Pickups=%d, Bomb Pickups=%d, Min Capture Time=%d, Max Capture Time=%d, Map Name=%s, Game Type=%d\n",
-                    players[numPlayers].playerNum, getTeamName(players[numPlayers].teamId),
-                    players[numPlayers].kills, players[numPlayers].deaths, players[numPlayers].assists,
-                    players[numPlayers].score, players[numPlayers].flagDropped, players[numPlayers].flagReturned,
-                    players[numPlayers].flagCaptured, players[numPlayers].flagPickups, players[numPlayers].bombPickups,
-                    players[numPlayers].minCapTime, players[numPlayers].maxCapTime,
-                    svs.gameSettings.mapName, svs.gameSettings.gameType
+                "Player %d: Team=%s, Kills=%d, Deaths=%d, Assists=%d, Score=%d, Flag Dropped=%d, Flag Returned=%d, Flag Captured=%d, Flag Pickups=%d, Bomb Pickups=%d, Min Capture Time=%d, Max Capture Time=%d, Map Name=%s, Game Type=%d\n",
+                players[numPlayers].playerNum, getTeamName(players[numPlayers].teamId),
+                players[numPlayers].kills, players[numPlayers].deaths, players[numPlayers].assists,
+                players[numPlayers].score, players[numPlayers].flagDropped, players[numPlayers].flagReturned,
+                players[numPlayers].flagCaptured, players[numPlayers].flagPickups, players[numPlayers].bombPickups,
+                players[numPlayers].minCapTime, players[numPlayers].maxCapTime,
+                svs.gameSettings.mapName, svs.gameSettings.gameType
             );
 
             numPlayers++;
@@ -1011,12 +1008,12 @@ void logTeamBalance(PlayerInfo *players, int numPlayers, int team1Id, int team2I
     for (int i = 0; i < numPlayers; i++) {
         if (svs.clients[players[i].playerNum].state >= CS_CONNECTED) {
             Com_DPrintf(
-                    "Player %d: Team=%s, Kills=%d, Deaths=%d, Assists=%d, Score=%d, Flag Dropped=%d, Flag Returned=%d, Flag Captured=%d, Flag Pickups=%d, Bomb Pickups=%d, Min Capture Time=%d, Max Capture Time=%d, Map Name=%s, Game Type=%d\n",
-                    players[i].playerNum, getTeamName(players[i].teamId),
-                    players[i].kills, players[i].deaths, players[i].assists, players[i].score,
-                    players[i].flagDropped, players[i].flagReturned, players[i].flagCaptured,
-                    players[i].flagPickups, players[i].bombPickups, players[i].minCapTime, players[i].maxCapTime,
-                    svs.gameSettings.mapName, svs.gameSettings.gameType
+                "Player %d: Team=%s, Kills=%d, Deaths=%d, Assists=%d, Score=%d, Flag Dropped=%d, Flag Returned=%d, Flag Captured=%d, Flag Pickups=%d, Bomb Pickups=%d, Min Capture Time=%d, Max Capture Time=%d, Map Name=%s, Game Type=%d\n",
+                players[i].playerNum, getTeamName(players[i].teamId),
+                players[i].kills, players[i].deaths, players[i].assists, players[i].score,
+                players[i].flagDropped, players[i].flagReturned, players[i].flagCaptured,
+                players[i].flagPickups, players[i].bombPickups, players[i].minCapTime, players[i].maxCapTime,
+                svs.gameSettings.mapName, svs.gameSettings.gameType
             );
 
             if (players[i].teamId == team1Id) {
@@ -1051,14 +1048,14 @@ void logTeamBalance(PlayerInfo *players, int numPlayers, int team1Id, int team2I
 
     Com_DPrintf("%s summary:\n", balanceType);
     Com_DPrintf(
-            "%s: %d players, Total score: %d, Kills: %d, Deaths: %d, Assists: %d, Flag Dropped: %d, Flag Returned: %d, Flag Captured: %d, Flag Pickups: %d, Bomb Pickups: %d, Min Capture Time: %d, Max Capture Time: %d\n",
-            getTeamName(team1Id), team1Count, team1Score, team1Kills, team1Deaths, team1Assists, team1FlagDropped,
-            team1FlagReturned, team1FlagCaptured, team1FlagPickups, team1BombPickups, team1MinCapTime, team1MaxCapTime
+        "%s: %d players, Total score: %d, Kills: %d, Deaths: %d, Assists: %d, Flag Dropped: %d, Flag Returned: %d, Flag Captured: %d, Flag Pickups: %d, Bomb Pickups: %d, Min Capture Time: %d, Max Capture Time: %d\n",
+        getTeamName(team1Id), team1Count, team1Score, team1Kills, team1Deaths, team1Assists, team1FlagDropped,
+        team1FlagReturned, team1FlagCaptured, team1FlagPickups, team1BombPickups, team1MinCapTime, team1MaxCapTime
     );
     Com_DPrintf(
-            "%s: %d players, Total score: %d, Kills: %d, Deaths: %d, Assists: %d, Flag Dropped: %d, Flag Returned: %d, Flag Captured: %d, Flag Pickups: %d, Bomb Pickups: %d, Min Capture Time: %d, Max Capture Time: %d\n",
-            getTeamName(team2Id), team2Count, team2Score, team2Kills, team2Deaths, team2Assists, team2FlagDropped,
-            team2FlagReturned, team2FlagCaptured, team2FlagPickups, team2BombPickups, team2MinCapTime, team2MaxCapTime
+        "%s: %d players, Total score: %d, Kills: %d, Deaths: %d, Assists: %d, Flag Dropped: %d, Flag Returned: %d, Flag Captured: %d, Flag Pickups: %d, Bomb Pickups: %d, Min Capture Time: %d, Max Capture Time: %d\n",
+        getTeamName(team2Id), team2Count, team2Score, team2Kills, team2Deaths, team2Assists, team2FlagDropped,
+        team2FlagReturned, team2FlagCaptured, team2FlagPickups, team2BombPickups, team2MinCapTime, team2MaxCapTime
     );
 }
 
